@@ -1,0 +1,42 @@
+---
+title: "AMR script"
+author: "Jordan Prahl"
+date: "2023-02-17"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+This is the code chunk written for AMR in order to import the data from each csv file within a directory into a single uniform dataframe. 
+
+```{r, Prep_work}
+
+library(readr)
+file_location <- "L:/AMRADER/Golgi/febabstract_stats/APICALgroupA"   # Define the folder where the .csv files are located
+list_csv_files <- list.files( path = file_location, recursive = TRUE, pattern="*.csv")  # List all .csv files within all the subfolders of the directory
+AMR <- data.frame(matrix(ncol = 3, nrow = 0))   # create data frame with 0 rows and 5 columns to be the repository for the imported data
+colnames(AMR) <- c("dendrite_length", "value", "file")  # provide column names
+
+```
+
+
+The following loop says, for each item in the list of files, we want to open it (ignoring the first 3 lines of metadataw in the files), grab only the rows which include dendrite length data, add a file identifier, and finally add the data to the AMR dataframe. 
+
+
+```{r}
+for (i in 1:length(list_csv_files)) {
+  setwd(file_location)
+  a <- as.data.frame(read_csv(list_csv_files[i], skip = 3))
+  a <- a[grep("Dendrite", a[,1]), ]
+  a <- a[,c(1,2)]
+  a$file <- list_csv_files[i]
+  colnames(a) <- c("dendrite_length", "value", "file") 
+  AMR <- rbind(AMR, a)
+}
+
+head(AMR, n=25)
+
+sessionInfo()
+
+```
