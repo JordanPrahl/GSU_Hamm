@@ -5,21 +5,16 @@ output: html_notebook
 ---
 
 
-I don't know exactly what I'm doing yet but I will start here
-
 ```{r, warning=F}
-list.of.packages <- c("Rtools", "ggplot2", "edgeR", "limma", "ggpubr")
+list.of.packages <- c("Rtools", "ggplot2", "edgeR", "limma", "ggpubr", "tidyverse", "tseries")
 
 if (!require(list.of.packages)) install.packages(list.of.packages)
-
 ```
 
 ```{r}
-
 library(readxl)
 Compiled_results_2D <- read_excel("L:/microglia_GB_AMR/032422_microglia_AMR_GB/Result_of_differences/Compiled_results_2D.xlsx")
 ds <- Compiled_results_2D
-
 
 meas <- read.csv("L:/microglia_GB_AMR/032422_microglia_AMR_GB/Result_of_differences/20220920_1055/measurements.csv")
 
@@ -41,12 +36,9 @@ head(ds)
 View(ds)
 
 write.csv(data4, file="~/geneTPMdata.csv")
-
 ```
 
 ```{r, Motility_Autocorrelation}
-
-#install.packages(c("tidyverse", "tseries"))
 library(tseries)
 library(tidyverse)
 
@@ -75,7 +67,6 @@ g + geom_line() + theme_classic() +xlim(-steps, steps) +
   labs(x="Minute", y="Pearson Correlation (R)", 
        title="Motility Autocorrelation", 
        subtitle = "Average correlation of subsequnt frame variability")
-
 ```
 
 ```{r}
@@ -93,11 +84,9 @@ my_comparisons2 <- list(   c("M1S1", "M1S2"),
                           c("M2S1", "M2S2")
                         )
 
-
 compare_means(PercentArea ~ Mouse_Stack, data = ds)
 aStat <- compare_means(PercentArea ~ Mouse_Stack, data = ds, method = "anova")
 aStat
-
 
 #Set your variables
 use_title <- "Measure of gross microglial dynamics (Intra-mouse)"
@@ -122,10 +111,7 @@ p <- g + geom_boxplot() +
         plot.caption = element_text(size= 14, face = "italic")
   ) 
 
-
-
 ### COMPARE BY MOUSE ###########
-
 use_title <- "Measure of gross microglial dynamics (Inter-mouse)"
 my_comps2 <- list(c("M1", "M2"))
 g <- ggplot(ds, aes(mouse, PercentArea))
@@ -141,7 +127,6 @@ p <- g + geom_boxplot() +
         plot.title = element_text(size=19),
         plot.caption = element_text(size= 14, face = "italic")
   )
-
 ```
 
 ```{r}
@@ -168,4 +153,3 @@ g + geom_smooth() +
 ```{r}
 sessionInfo()
 ```
-
