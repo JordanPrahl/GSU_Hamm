@@ -1,0 +1,169 @@
+// This macro was designed to automatically process the image files in the most 
+// efficient way possible, going frame by frame and comparing the differences in 
+// images across the stack. The resulting binary image and particle analysis are 
+// saved in an output folder.
+
+
+// ##########################################################################################################
+// ### USER INPUT REQUIRED ##################################################################################
+// ##########################################################################################################
+// After this sections, there is no further editing required.
+// First we need to define our file and output directory
+// ##########################################################################################################
+
+stack = "M2S1" ;  // The nomenclature here is Mouse 1 (M1) and stack-001 (S1)
+inputDir = "L:/microglia_GB_AMR/032422_microglia_AMR_GB/Result_of_differences/"; // Define our output path
+iterations = 30; // Define how many frames you want to run through. Smaller number for tests
+z_compress = false; // IF true, then the macro will reduce dimensionality (potentially cleaner but we lose information)
+
+
+
+
+
+// STOP- No more editing past here
+
+
+
+
+
+// ##########################################################################################################
+// ### DEFINE DATE VARIABLE #################################################################################
+// ##########################################################################################################
+// Next, we call in the DateTime object and make it more 
+// easily understandable by making days and months a two
+// digit code (e.g., Jan.=01)
+// ##########################################################################################################
+
+getDateAndTime(year, month, dayOfWeek, dayOfMonth, hour, minute, second, msec); // Call in the DateTime info
+month=month+1; // The month variable starts at 0, so we need to add one to make it recognizable to how we define months
+
+// If any of the date variables are less than ten, we convert them to a two digit code (i.e. 09 instead of 9).
+if (month < 10) 		{month = "0"+month;	}			else {month=month;	}
+if (minute < 10) 		{minute = "0"+minute;}			else {minute=minute;}
+if (dayOfMonth < 10) 	{dayOfMonth = "0"+dayOfMonth;}	else {dayOfMonth=dayOfMonth;}
+if (hour < 10) 			{hour = "0"+hour;}				else {hour=hour;	}
+
+print("Analysis started at: "+hour+":"+minute+", "+year+"-"+month+"-"+dayOfMonth);
+
+
+// ##########################################################################################################
+// ### ORGANIZE OUR OUTPUT DIRECTORIES ######################################################################
+// ##########################################################################################################
+// Separate the outputs into image and results folders 
+// ##########################################################################################################
+
+dt=""+year+""+month+""+dayOfMonth+"_"+hour+""+minute; // make a variable for the dateTime object
+dt1=stack+"_"+dt; // this is the identifier for the folders
+
+if (z_compress == true) {folder2 = inputDir + dt1 +"_2D"+"/";} else {folder2 = inputDir + dt1 +"_3D"+"/";}
+
+// folder2 = inputDir + dt1 +"_2D"+"/"; // define an output folder to be labeled with dateTime
+File.makeDirectory(folder2); // make the output folder
+folder3 = folder2 + "measurements/";
+File.makeDirectory(folder3); // make the output folder
+folder4 = folder2 + "images/";
+File.makeDirectory(folder4); // make the output folder
+
+
+// ##########################################################################################################
+// ### IMAGE PROCESSING LOOP FUNCTIONS ######################################################################
+// ##########################################################################################################
+// I corrected an error where the base image was getting
+// corrupted when it was kept open, so I close and re-
+// open the base image each cycle. I was also finding an
+// issue where Fiji was getting confused which image it
+// should be working on, so I added selectWindow command
+// ##########################################################################################################
+
+
+// ##########################################################################################################
+// ### 2-dimensional analysis which compresses the z-stack into one plane ###################################
+// ##########################################################################################################
+
+function IP_2D() {
+	print( "2-Dimensional Analsysis");
+	for (it = 1; it < iterations; it++) {
+		ns=it+1;
+		print( "Comparing frames "+it+" and "+ ns );
+		open("L:/microglia_GB_AMR/032422_microglia_AMR_GB/Unprocessed_stacks/"+stack+".tif"); 					// Open your stack (probably 1800 images)
+		run("Set Scale...", "distance=10 known=1.31 unit=um");
+		run("Make Substack...", "slices=1-900"); 															// Delete duplicates by creating a substack. New image frame named "Substack (1-900)"
+		selectWindow("Substack (1-900)");	run("Stack to Hyperstack...", "order=xyczt(default) channels=1 slices=30 frames=30 display=Color"); // Create your 30x30 hyperstack
+		selectWindow("Substack (1-900)");	run("Make Subset...", "slices=1-30 frames=" + it+"-"+ns); 											// reduce down to your frames of interest (1-2, 2-3, 3-4, etc.)
+		selectWindow("Substack (1-900)-1");	run("Enhance Contrast...", "saturated=0.35 normalize process_all");									// Enhance contrast on new window
+		selectWindow("Substack (1-900)-1");	run("Subtract Background...", "rolling=25 stack");													// Remove background noise	
+		print("Aligning Slices...");
+		selectWindow("Substack (1-900)-1");		run("Align slices in stack...", "method=5 windowsizex=598 windowsizey=573 x0=215 y0=204 swindow=0 subpixel=false itpmethod=0 ref.slice=1 show=true"); // Align slices	
+		selectWindow("Substack (1-900)-1");		makeRectangle(125, 125, 750, 750);	run("Crop");
+		selectWindow("Substack (1-900)-1");		run("Z Project...", "projection=Median all");
+		selectWindow("MED_Substack (1-900)-1");	run("Convert to Mask", "method=Triangle background=Dark calculate black list create");				// Set threshold, This step may need further optimization but Triangle seems to work alright
+		selectWindow("MASK_MED_Substack (1-900)-1");	run("Despeckle", "stack");																			// Remove the noise by despeckling
+		selectWindow("MASK_MED_Substack (1-900)-1");	run("Stack to Images");
+		imageCalculator("Difference create stack", "MASK_MED_Substack-0001","MASK_MED_Substack-0002");
+		if (it < 10) {it2 = "0"+it;	}	else {it2=it;	}
+		if (ns < 10) {ns2 = "0"+ns;	}	else {ns2=ns;	}
+		selectWindow("Result of MASK_MED_Substack-0001");		saveAs("Tiff", ""+folder4+stack+"_results_" +it2+ "-" +ns2+ ".tif");
+		selectWindow(""+stack+"_results_" +it2+ "-" +ns2+ ".tif");		run("Analyze Particles...", "clear summarize stack");														
+		saveAs("Results", ""+folder3+stack+"_Summary_"+it2+"-"+ns2+".csv");
+		close(stack+"_Summary_"+it2+"-"+ns2+".csv");
+		close("*");
+	}
+}
+
+
+// ##########################################################################################################
+// ### 3-dimensional analysis which analysis each z-slice between frames ####################################
+// ##########################################################################################################
+
+function IP_3D() {
+	print( "3-Dimensional Analsysis");
+	for (it = 1; it < iterations; it++) {
+		ns=it+1;
+		print( "Comparing frames "+it+" and "+ ns );
+		open("L:/microglia_GB_AMR/032422_microglia_AMR_GB/Unprocessed_stacks/"+stack+".tif"); 					// Open your stack (probably 1800 images)
+		run("Set Scale...", "distance=10 known=1.31 unit=um");
+		run("Make Substack...", "slices=1-900"); 															// Delete duplicates by creating a substack. New image frame named "Substack (1-900)"
+		selectWindow("Substack (1-900)");	run("Stack to Hyperstack...", "order=xyczt(default) channels=1 slices=30 frames=30 display=Color"); // Create your 30x30 hyperstack
+		selectWindow("Substack (1-900)");	run("Make Subset...", "slices=1-30 frames=" + it+"-"+ns); 											// reduce down to your frames of interest (1-2, 2-3, 3-4, etc.)
+		selectWindow("Substack (1-900)-1");	run("Enhance Contrast...", "saturated=0.35 normalize process_all");									// Enhance contrast on new window
+		selectWindow("Substack (1-900)-1");	run("Subtract Background...", "rolling=25 stack");													// Remove background noise	
+		print("Aligning Slices...");
+		selectWindow("Substack (1-900)-1");	run("Align slices in stack...", "method=5 windowsizex=598 windowsizey=573 x0=215 y0=204 swindow=0 subpixel=false itpmethod=0 ref.slice=1 show=true"); // Align slices	
+		selectWindow("Substack (1-900)-1");	makeRectangle(125, 125, 750, 750);	run("Crop");
+		selectWindow("Substack (1-900)-1");	run("Convert to Mask", "method=Triangle background=Dark calculate black list create");				// Set threshold, This step may need further optimization but Triangle seems to work alright
+		selectWindow("MASK_Substack (1-900)-1");	run("Despeckle", "stack");																			// Remove the noise by despeckling
+		selectWindow("MASK_Substack (1-900)-1");	run("Make Subset...", "slices=1-30 frames=1");														// Reduce dimensions down to one frame panels
+		selectWindow("MASK_Substack (1-900)-1");	run("Make Subset...", "slices=1-30 frames=2");
+		imageCalculator("Difference create stack", "MASK_Substack (1-900)-2","MASK_Substack (1-900)-3");
+		if (it < 10) {it2 = "0"+it;	}	else {it2=it;	}
+		if (ns < 10) {ns2 = "0"+ns;	}	else {ns2=ns;	}
+		selectWindow("Result of MASK_Substack (1-900)-2");	saveAs("Tiff", ""+folder4+stack+"_results_" +it2+ "-" +ns2+ ".tif");
+		selectWindow(""+stack+"_results_" +it2+ "-" +ns2+ ".tif"); run("Analyze Particles...", "clear summarize stack");												
+		saveAs("Results", ""+folder3+stack+"_Summary_"+it2+"-"+ns2+".csv");
+		close(stack+"_Summary_"+it2+"-"+ns2+".csv");
+		close("*");
+	
+	}
+}
+
+
+if (z_compress == true) {IP_2D();} else {IP_3D();}
+
+// ##########################################################################################################
+// ### FINAL REPORTS ########################################################################################
+// ##########################################################################################################
+
+getDateAndTime(year, month, dayOfWeek, dayOfMonth, hour, minute, second, msec); // Call in the DateTime info
+month=month+1; // The month variable starts at 0, so we need to add one to make it recognizable to how we define months
+if (month < 10) 		{month = "0"+month;	}			else {month=month;	}
+if (minute < 10) 		{minute = "0"+minute;}			else {minute=minute;}
+if (dayOfMonth < 10) 	{dayOfMonth = "0"+dayOfMonth;}	else {dayOfMonth=dayOfMonth;}
+if (hour < 10) 			{hour = "0"+hour;}				else {hour=hour;	}
+print("");
+print("Analysis completed at: "+hour+":"+minute+", "+year+"-"+month+"-"+dayOfMonth);
+
+print("");
+print("Image Analysis Completed Successfully!");
+
+selectWindow("Log");	saveAs("Text", ""+folder2+"Log.txt");
+
