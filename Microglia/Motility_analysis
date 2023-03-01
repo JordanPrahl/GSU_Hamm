@@ -1,0 +1,171 @@
+---
+title: "Microglia Notebook"
+author: "Jordan Prahl"
+output: html_notebook
+---
+
+
+I don't know exactly what I'm doing yet but I will start here
+
+```{r, warning=F}
+list.of.packages <- c("Rtools", "ggplot2", "edgeR", "limma", "ggpubr")
+
+if (!require(list.of.packages)) install.packages(list.of.packages)
+
+```
+
+```{r}
+
+library(readxl)
+Compiled_results_2D <- read_excel("L:/microglia_GB_AMR/032422_microglia_AMR_GB/Result_of_differences/Compiled_results_2D.xlsx")
+ds <- Compiled_results_2D
+
+
+meas <- read.csv("L:/microglia_GB_AMR/032422_microglia_AMR_GB/Result_of_differences/20220920_1055/measurements.csv")
+
+meas$Source.Name <- gsub('-', '_', meas$Source.Name)
+meas$Source.Name <- gsub('.csv', '', meas$Source.Name)
+
+head(meas)
+head(ds)
+
+ds$mouse <- ds$Mouse_Stack
+ds$mouse <- gsub("S1", "", ds$mouse)
+ds$mouse <- gsub("S2", "", ds$mouse)
+ds$stack <- ds$Mouse_Stack
+ds$stack <- gsub("M1","", ds$stack)
+ds$stack <- gsub("M2","", ds$stack)
+
+ds$time <- rep(1:29, times=4)
+head(ds)
+View(ds)
+
+write.csv(data4, file="~/geneTPMdata.csv")
+
+```
+
+```{r, Motility_Autocorrelation}
+
+#install.packages(c("tidyverse", "tseries"))
+library(tseries)
+library(tidyverse)
+
+ds2 <- read.csv("L:/microglia_GB_AMR/032422_microglia_AMR_GB/dataset2.csv", header=F)
+
+ds3 <- t(ds2)
+
+steps <- 8
+
+A1 <- acf(ds3[1,], lag.max = steps, pl=F)
+A2 <- acf(ds3[2,], lag.max = steps, pl=F)
+A3 <- acf(ds3[3,], lag.max = steps, pl=F)
+A4 <- acf(ds3[4,], lag.max = steps, pl=F)
+AC <- cbind(A1[['lag']], A1[['acf']], A2[['acf']], A3[['acf']], A4[['acf']])
+colnames(AC) <- c("lag", "m1s1", "m1s2", "m2s1", "m2s2")
+AC <- as.data.frame(AC)
+AC$avg <- rowMeans(AC[,2:5])
+ACinv <- AC
+ACinv$lag <- ACinv$lag*-1
+AC2 <- rbind(AC, ACinv)
+
+AC
+
+g <- ggplot(AC2, aes(lag, y=avg))
+g + geom_line() + theme_classic() +xlim(-steps, steps) +
+  labs(x="Minute", y="Pearson Correlation (R)", 
+       title="Motility Autocorrelation", 
+       subtitle = "Average correlation of subsequnt frame variability")
+
+```
+
+```{r}
+library(ggplot2)
+library(ggpubr) 
+
+my_comparisons1 <- list(   c("M1S1", "M1S2"), 
+                          c("M1S2", "M2S1"),
+                          c("M2S1", "M2S2"),
+                          c("M1S1", "M2S1"),
+                          c("M1S2", "M2S2"),
+                          c("M1S1", "M2S2")
+                        )
+my_comparisons2 <- list(   c("M1S1", "M1S2"),
+                          c("M2S1", "M2S2")
+                        )
+
+
+compare_means(PercentArea ~ Mouse_Stack, data = ds)
+aStat <- compare_means(PercentArea ~ Mouse_Stack, data = ds, method = "anova")
+aStat
+
+
+#Set your variables
+use_title <- "Measure of gross microglial dynamics (Intra-mouse)"
+use_subtitle <- "Quantification of unique pixels between subsequent timepoints. Images Z-compressed by median pixel intensity."
+use_y_axis <- "Percent of viewing window change"
+
+
+######### COMPARE BY STACK #################
+g <- ggplot(ds, aes(Mouse_Stack, PercentArea))
+p <- g + geom_boxplot() +
+  geom_dotplot(binaxis = "y", stackdir = "center") +
+  #geom_jitter() +
+  stat_compare_means(comparisons = my_comparisons2, label = "p.adj") +
+  theme_minimal() +
+  labs(title = use_title,
+       #subtitle = use_subtitle,
+       x= "Mouse & Stack", y="Area of unique pixels (% of viewing window)",
+       caption = "Anova, P=0.81") + 
+  theme(axis.text = element_text(size=14),
+        axis.title=element_text(size=16),
+        plot.title = element_text(size=19),
+        plot.caption = element_text(size= 14, face = "italic")
+  ) 
+
+
+
+### COMPARE BY MOUSE ###########
+
+use_title <- "Measure of gross microglial dynamics (Inter-mouse)"
+my_comps2 <- list(c("M1", "M2"))
+g <- ggplot(ds, aes(mouse, PercentArea))
+p <- g + geom_boxplot() +
+  geom_dotplot(binaxis = "y", stackdir = "center" , dotsize=0.75) +
+  stat_compare_means(comparisons = my_comps2, label = "p.adj") +
+  theme_minimal() +
+  labs(title = use_title,
+       x= "Mouse", y="Area of unique pixels (% of viewing window)",
+       caption = "") + 
+  theme(axis.text = element_text(size=14),
+        axis.title=element_text(size=16),
+        plot.title = element_text(size=19),
+        plot.caption = element_text(size= 14, face = "italic")
+  )
+
+```
+
+```{r}
+g <- ggplot(ds, aes(x=time, y=PercentArea, color=Mouse_Stack))
+g + geom_line()
+g+geom_smooth()
+
+
+g <- ggplot(ds, aes(x=time, y=PercentArea))
+g + geom_smooth() + 
+  geom_line(aes(color=Mouse_Stack)) +
+  theme_classic() +
+  labs(x= "Time (minutes)", y="Area of unique pixels (% of viewing window)")+ 
+  theme(legend.position = "none", 
+        axis.text = element_text(size=14),
+        axis.title=element_text(size=16),
+        plot.title = element_text(size=19),
+        plot.caption = element_text(size= 14, face = "italic")
+  )
+```
+
+
+## Session Info
+```{r}
+sessionInfo()
+```
+
