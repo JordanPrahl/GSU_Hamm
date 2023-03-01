@@ -1,0 +1,100 @@
+---
+title: "Review Figure"
+author: "Jordan Prahl"
+date: "2023-02-27"
+output: html_document
+---
+
+## Library
+
+```{r, message=F}
+library(ggplot2)
+library(dplyr)
+```
+
+## Read in the expression data, gene lists, and tissue lists
+
+```{r}
+# Read in all of the gene expression data from Human Protein Atlas
+d1 <- read.csv("C:/Users/jprahl/Documents/Review_paper/rna_tissue_hpa.tsv", sep = "\t")
+# Read in the list of prioritized genes from the SZ meta analysis and the sz rare variant papers
+g1 <- read.csv("C:/Users/jprahl/Documents/Review_paper/ens_gene_ids.csv", sep = ",", header = F)
+# Read in the tissue identifiers defined by JPH
+t0 <- read.csv("C:/Users/jprahl/Documents/Review_paper/tissue_list.csv", sep = ",", header = T)
+```
+
+
+## Organize and Merge Tissue and Gene expression data
+
+```{r}
+t1 <- subset(t0, t0$in_cortex == 1 | t0$subregions > 0) #Ignore undefined tissues
+colnames(g1) <- c("gene")
+d2 <- subset(d1, d1$Gene %in% g1$gene) #Subset the gene expression data for only genes of interest
+d3 <- subset(d2, d2$Tissue %in% t1$Tissue) #Further subset expression data for only relevant tissues
+d3 <- d3[,c(1,2,3,6)] #drop the unused columns
+
+# Merge the information for cortical sub-region
+d4 <- merge(d3, t1, by = "Tissue")
+# Define the cortical regions
+d4$region <-  ifelse(is.na(d4$subregions) == T,'undefined cortex',
+                         ifelse(d4$subregions <= 7,'prefrontal cortex',
+                         ifelse(d4$subregions <= 13,'Sensory cortex',
+                         "Motor Cortex")))
+head(d4)
+dim(d4)
+write.csv(d4, "C:/users/jprahl/Documents/Review_paper/merged_data.csv")
+```
+
+## Apply Z-score information to each sample
+
+Z-score here is calculated as the nTPM - gene_avg(nTPM) / gene_SD(nTPM) across all cortical regions
+
+```{r}
+# Here I will determine the Z-score using the scale function within ave() to say we're examining nTPM within the gene groups
+d4$zScore <- ave(d4$nTPM, d4$Gene, FUN=scale)
+d4$sig <- ifelse(abs(d4$zScore) > 2.58, T, F)
+```
+
+## Filter for >10 nTPM
+
+```{r}
+# We need to subset the list further for only genes which are expressed in at least one tissue with an nTPM > 10
+d4.5 <- subset(d4, d4$region == c("prefrontal cortex", 'Sensory cortex'))
+g2 <- as.data.frame(tapply(d4.5$nTPM, d4.5$Gene, max))
+g2 <- subset(g2, g2[,1] > 10)
+d5 <- subset(d4, d4$Gene %in% rownames(g2))
+head(d5)
+dim(d5)
+length(unique(d5$Gene.name))
+```
+
+## Plot
+
+```{r}
+#Now I want to add 0.01 to every nTPM to avoid having zeros in the data which get lost in log scale
+d5$nTPM <- d5$nTPM + 0.1
+
+# Finally, I get to plot the data
+d6 <- subset(d5, d5$region == c("prefrontal cortex", 'Sensory cortex'))
+d6 <- subset(d6, d6$sig == T)
+
+p1 <- ggplot(d5, aes(x=nTPM, y=reorder(Gene.name, nTPM, median)))
+p1 + geom_boxplot(outlier.color = "grey") + geom_point(data=d6, aes(x=nTPM, y=reorder(Gene.name, nTPM, median), color=region, shape=region)) + scale_x_log10() + theme_minimal() + labs(y="Priority genes from literature") + theme(legend.position="bottom", legend.title = element_blank())
+ggsave("C:/Users/jprahl/Documents/Review_paper/Review_figure.png", plot = last_plot(), unit= "in", width = 7.5, height = 7, dpi = 300)
+```
+
+
+
+```{r}
+# This was just to answer JPH's question about how many of the 10 genes defined as rare variants from the paper made it into the figure.
+g10 <- c('CACNA1G','GRIN2A','GRIA3','SP4','RB1CC1','SETD1A','TRIO','XPO7','CUL1','HERC1')
+# From the list of 10 genes defined as rare causal SZ variants in the literature, these ones have >10nTPM in at least 1 PFC or SSC subregion
+answer <- (subset(d5$Gene.name, d5$Gene.name %in% g10 & d5$Tissue == "angular gyrus"))
+length(answer)
+
+answer
+
+length(subset(g10, !(g10 %in% answer)))
+
+subset(g10, !(g10 %in% answer))
+```
