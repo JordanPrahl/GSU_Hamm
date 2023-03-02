@@ -1,0 +1,62 @@
+---
+title: "Publication_Counts"
+author: "Jordan Prahl"
+date: "2023-03-01"
+output: html_document
+---
+
+## Publication counts from PubMed
+
+These search queries were performed in October of 2022. 
+
+base_query = SPECIES[Title/Abstract] AND schizophrenia[Title/Abstract]
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "L:/J3/Review_paper/")
+```
+
+
+```{r, library}
+#install.packages(c("stringr", "ggplot2", "cowplot"), dependencies = T)
+library(stringr)
+library(ggplot2)
+library(cowplot)
+```
+
+
+```{r, data_load}
+d1 <- read.csv("./pubmed_results.csv")
+head(d1)
+```
+
+
+```{r, plot}
+
+d2 <- subset(d1, d1$Group == 'Process')
+d3 <- subset(d1, d1$Group == 'Brain_region')
+p1 <- ggplot(data = d2, aes(x=Proportion, y=reorder(Search_Query, Proportion, median), fill=Species))
+p2 <- ggplot(data = d3, aes(x=Proportion, y=reorder(Search_Query, Proportion, median), fill=Species))
+
+p1_1 <- p1 + geom_col(position = "dodge") + 
+  labs(x= "", y="Search Query\n(Biological process)") +
+  theme_cowplot() + theme(axis.text.x=element_blank(), 
+                          axis.ticks.x=element_blank(), 
+                          legend.position="top", 
+                          legend.title = element_blank()) + 
+  scale_fill_manual(values=c("#E69F00", "#56B4E9"))
+
+p2_1 <- p2 + geom_col(position = "dodge") + 
+  labs(x= "Proportion of Publication on PubMed", y="Search Query\n(Brain Region)") +
+  theme_cowplot() + 
+  theme(legend.position = "none") +
+  scale_y_discrete(labels = function(x) str_wrap(x, width = 30)) + 
+  scale_fill_manual(values=c("#E69F00", "#56B4E9"))
+
+cowplot::plot_grid(p1_1, p2_1, ncol=1, align = "v")
+ggsave("./FIGURE_publicationCount.png", plot=last_plot(), dpi=300, units = "in", width = 8.5, height = 4.5)
+```
+
+```{r, session_info}
+sessionInfo()
+```
