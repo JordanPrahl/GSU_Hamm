@@ -1,42 +1,113 @@
 ---
-title: "AMR script"
+title: "Anna's data import"
 author: "Jordan Prahl"
-date: "2023-02-17"
-output:
-  html_document:
-    df_print: paged
+date: "2023-04-21"
+output: html_document
 ---
 
-
-This is the code chunk written for AMR in order to import the data from each csv file within a directory into a single uniform dataframe. 
-
-```{r, Prep_work}
-
+```{r}
 library(readr)
-file_location <- "L:/AMRADER/Golgi/febabstract_stats/APICALgroupA"   # Define the folder where the .csv files are located
-list_csv_files <- list.files( path = file_location, recursive = TRUE, pattern="*.csv")  # List all .csv files within all the subfolders of the directory
-AMR <- data.frame(matrix(ncol = 3, nrow = 0))   # create data frame with 0 rows and 5 columns to be the repository for the imported data
-colnames(AMR) <- c("dendrite_length", "value", "file")  # provide column names
+library(stringr)
+```
 
+```{r, 20230425_AMR_data}
+
+AMR_20230425 <- data.frame(matrix(ncol = 4, nrow = 0))   # create data frame with 0 rows and 5 columns to be the repository for the imported data
+
+address <-   "L:/AMRADER/Golgi/april23_stats"
+file_location <- address
+list_csv_files <- list.files( path = file_location, recursive = TRUE, pattern="*.csv")  # List all .csv files within all the subfolders of the directory
+tmp1 <- data.frame(matrix(ncol = 3, nrow = 0))   # create data frame with 0 rows and 5 columns to be the repository for the imported data
+colnames(tmp1) <- c("dendrite_length", "value", "file")  # provide column names
+    
+for (i in 1:length(list_csv_files)) {
+    setwd(file_location)
+    a <- as.data.frame(read_csv(list_csv_files[i], skip = 3))
+    a <- a[grep("Dendrite", a[,1]), ]
+    a <- a[,c(1,2)]
+    a$file <- list_csv_files[i]
+    colnames(a) <- c("dendrite_length", "value", "file") 
+    tmp1 <- rbind(tmp1, a)
+    }
+AMR_20230425 <- rbind(AMR_20230425, tmp1)
+
+AMR_20230425$group <- substr(AMR_20230425$file, as.numeric(str_locate(AMR_20230425$file, "Group")[,2])+1, as.numeric(str_locate(AMR_20230425$file, "Group")[,2])+1)
+
+AMR_20230425$radii <- AMR_20230425$dendrite_length
+AMR_20230425$radii <- gsub("Dendrite Length Sum - ", "", AMR_20230425$radii)
+AMR_20230425$radii <- gsub(" um Sholl Ring", "", AMR_20230425$radii)
+AMR_20230425$radii <- as.numeric(AMR_20230425$radii)
+
+AMR_20230425$anatomy <- substr(AMR_20230425$file, 1,5)
+
+write.csv(AMR_20230425, file = "L:/J3/20230425_AMR_dendrite_stuff.csv")
+
+
+
+library(dplyr)
+tmp2 <- AMR_20230425
+
+tmp3 <- expand.grid(column1=unique(tmp2$file), column2=unique(tmp2$dendrite_length))
+colnames(tmp3) <- c("file", "dendrite_length")
+
+
+merge_df <- merge(tmp3, AMR_20230425, by=c("dendrite_length", "file"), all = T)
+View(merge_df)
+
+merge_df$radii <- merge_df$dendrite_length
+merge_df$radii <- gsub("Dendrite Length Sum - ", "", merge_df$radii)
+merge_df$radii <- gsub(" um Sholl Ring", "", merge_df$radii)
+merge_df$radii <- as.numeric(merge_df$radii)
+
+merge_df$anatomy <- substr(merge_df$file, 1,5)
+
+merge_df$group <- substr(merge_df$file, as.numeric(str_locate(merge_df$file, "Group")[,2])+1, as.numeric(str_locate(merge_df$file, "Group")[,2])+1)
+
+write.csv(merge_df, file = "L:/J3/20230425_AMR_dendrite_stuff_withNAs.csv")
 ```
 
 
-The following loop says, for each item in the list of files, we want to open it (ignoring the first 3 lines of metadataw in the files), grab only the rows which include dendrite length data, add a file identifier, and finally add the data to the AMR dataframe. 
+
+```{r, Labelled_spots}
+
+file_location <- "L:/AMRADER/Golgi/april23_stats"   # Define the folder where the .csv files are located
+list_csv_files <- list.files( path = file_location, recursive = TRUE, pattern="*.csv")  # List all .csv files within all the subfolders of the directory
+AMR2 <- data.frame(matrix(ncol = 3, nrow = 0))   # create data frame with 0 rows and 5 columns to be the repository for the imported data
+colnames(AMR2) <- c("value", "sholl_int", "file")  # provide column names
 
 
-```{r}
 for (i in 1:length(list_csv_files)) {
   setwd(file_location)
   a <- as.data.frame(read_csv(list_csv_files[i], skip = 3))
-  a <- a[grep("Dendrite", a[,1]), ]
-  a <- a[,c(1,2)]
+  a <- a[grep("Number of labelled Spots per Class", a[,1]), ]
+  a <- a[,c(2,4)]
   a$file <- list_csv_files[i]
-  colnames(a) <- c("dendrite_length", "value", "file") 
-  AMR <- rbind(AMR, a)
+  colnames(a) <- c("value", "sholl_int", "file") 
+  AMR2 <- rbind(AMR2, a)
 }
 
-head(AMR, n=25)
+View(AMR2)
 
-sessionInfo()
+
+tmp2 <- AMR2
+
+tmp3 <- expand.grid(column1=unique(tmp2$file), column2=unique(tmp2$sholl_int))
+colnames(tmp3) <- c("file", "sholl_int")
+
+
+merge_df2 <- merge(tmp3, AMR2, by=c("sholl_int", "file"), all = T)
+View(merge_df2)
+
+merge_df2$radii <- merge_df2$sholl_int
+merge_df2$radii <- gsub("Sholl Intersections:: ", "", merge_df2$radii)
+merge_df2$radii <- as.numeric(merge_df2$radii)
+
+merge_df2$anatomy <- substr(merge_df2$file, 1,5)
+
+merge_df2$group <- substr(merge_df2$file, as.numeric(str_locate(merge_df2$file, "Group")[,2])+1, as.numeric(str_locate(merge_df2$file, "Group")[,2])+1)
+
+write.csv(merge_df2, file = "L:/J3/20230425_AMR_labelled_spots_withNAs.csv")
 
 ```
+
+
